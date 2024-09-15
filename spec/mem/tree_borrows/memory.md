@@ -236,6 +236,7 @@ impl<T: Target> Memory for TreeBorrowsMemory<T> {
         fn_entry: bool,
     ) -> Result<Pointer<Self::Provenance>> {
         ret(if let Some((permission, size, protected)) = Self::ptr_permissions(ptr_type, fn_entry) {
+            // FIXME: well here we don't have the vtable map ...
             let pointee_size = size.compute(ptr.metadata);
             self.reborrow(ptr.thin_pointer, pointee_size, permission, protected, frame_extra)?.widen(ptr.metadata)
         } else {

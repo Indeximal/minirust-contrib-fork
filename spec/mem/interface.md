@@ -125,6 +125,7 @@ pub trait Memory {
         _fn_entry: bool,
     ) -> Result<Pointer<Self::Provenance>> {
         if let Some(layout) = ptr_type.safe_pointee() {
+            // FIXME: well here we don't have the vtable map ...
             self.dereferenceable(ptr.thin_pointer, layout.size.compute(ptr.metadata))?;
         }
         ret(ptr)

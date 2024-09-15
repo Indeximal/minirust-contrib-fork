@@ -85,6 +85,11 @@ pub enum Type {
         /// this is independent of the fields' alignment.
         align: Align,
     },
+    /// This is surprisingly not used for method invocation I think, as only the pointer metadata counts.
+    /// I actually think this is not used at all in MiniRust. Since an `dyn Foo` Place can do nothing, not assigning to it, 
+    /// not field or index projection.
+    /// It might be used in minimize. ??
+    // TraitObject,
 }
 
 pub struct IntType {

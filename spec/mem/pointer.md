@@ -36,6 +36,7 @@ pub struct ThinPointer<Provenance> {
 /// The runtime metadata that can be stored in a wide pointer.
 pub enum PointerMeta {
     ElementCount(Int),
+    VTablePointer(VTableName), // with `Option<Provenance>` ? or alternatively have 1 name be undefined on purpose, and set that one when decoding ?
 }
 
 /// A "pointer" is the thin pointer with optionally some metadata, making it a wide pointer.
@@ -50,6 +51,7 @@ pub struct Pointer<Provenance> {
 pub enum PointerMetaKind {
     None,
     ElementCount,
+    VTablePointer,
 }
 
 impl<Provenance> ThinPointer<Provenance> {
@@ -73,6 +75,7 @@ impl PointerMeta {
     pub fn meta_kind(self) -> PointerMetaKind {
         match self {
             PointerMeta::ElementCount(_) => PointerMetaKind::ElementCount,
+            PointerMeta::VTablePointer(_) => PointerMetaKind::VTablePointer,
         }
     }
 }
@@ -101,11 +104,17 @@ pub struct PointeeInfo {
 }
 
 /// Describes how the size of the value can be determined.
+// This will need to be a `LayoutStrategy` / `SizeAndAlignStrategy`.
 pub enum SizeStrategy {
     /// The type is statically `Sized`.
     Sized(Size),
     /// The type contains zero or more elements of the inner size.
     Slice(Size),
+    /// The size of the type must be looked up in the VTable of wide pointer.
+    /// 
+    /// (In a way this defines the "type" of the pointee as a trait object,
+    /// there is no actual `Type` with this strategy).
+    TraitObject,
 }
 
 /// Stores all the information that we need to know about a pointer.
@@ -124,11 +133,42 @@ pub enum PtrType {
         meta_kind: PointerMetaKind,
     },
     FnPtr,
+    /// The pointee is a VTable.
+    /// FIXME: what exactly is the function of this? de/encoding for sure, how?
+    VTableName,
 }
 ```
 
+### VTable definitions
+
+(
+    How is virtual dispatch represented in MIR?
+    Right now I kinda assume that minimize can easily convert it to a form of
+    `Call<method>(&dyn Foo, other_args)` which will then result in `Call<resolved method>(&T, other_args)`.
+
+    About provenance:
+    VTableName should only be able to be decoded with provenance I guess.
+    Would this need duplication of PointerExposeProv usw??
+
+    Also, what is a shim like this?: <https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir_transform/shim.rs.html>.
+
+)
 
 ```rust
+// this needs to be here, since it is referenced in `PointerMeta`
+pub struct VTableName(pub libspecr::Name);
+pub struct VTableIndex(pub libspecr::Name);
+
+// This could probably be in Machine
+pub struct VTable {
+    pub size: Size,
+    pub align: Align,
+    pub methods: Map<VTableIndex, FnName>
+}
+```
+
+```rust
+// This could mabye be moved to `lang`
 impl SizeStrategy {
     pub fn is_sized(self) -> bool {
         matches!(self, SizeStrategy::Sized(_))
@@ -143,21 +183,31 @@ impl SizeStrategy {
     }
 
     /// Computes the dynamic size, but the caller must provide compatible metadata.
-    pub fn compute(self, meta: Option<PointerMeta>) -> Size {
+    pub fn compute(self, meta: Option<PointerMeta>, vtables: Map<VTableName, VTable>) -> Result<Size> {
         match (self, meta) {
-            (SizeStrategy::Sized(size), None) => size,
-            // FIXME(UnsizedTypes): We need to assert that the resulting size isn't too big.
-            (SizeStrategy::Slice(elem_size), Some(PointerMeta::ElementCount(count))) => count * elem_size,
+            (SizeStrategy::Sized(size), None) => ret(size),
+            (SizeStrategy::Slice(elem_size), Some(PointerMeta::ElementCount(count))) => {
+                let raw_size = count * elem_size;
+                // FIXME(UnsizedTypes): We need to assert that the resulting size isn't too big.
+                ret(raw_size)
+            }
+            (SizeStrategy::TraitObject, Some(PointerMeta::VTablePointer(vtable_name))) => {
+                let Some(vtable) = vtables.get(vtable_name) else {
+                    throw_ub!("Computing the size of a trait object with invalid vtable in pointer");
+                };
+                ret(vtable.size)
+            }
             _ => panic!("pointer meta data does not match type"),
         }
     }
 
     /// Returns the metadata kind which is needed to compute this strategy,
-    /// i.e `self.meta_kind().matches(meta)` implies `self.compute(meta)` is well-defined.
+    /// i.e `self.meta_kind().matches(meta)` implies `self.compute(meta, _)` does not panic.
     pub fn meta_kind(self) -> PointerMetaKind {
         match self {
             SizeStrategy::Sized(_) => PointerMetaKind::None,
             SizeStrategy::Slice(_) => PointerMetaKind::ElementCount,
+            SizeStrategy::TraitObject => PointerMetaKind::VTablePointer,
         }
     }
 }

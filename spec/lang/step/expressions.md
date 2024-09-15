@@ -252,7 +252,7 @@ impl<M: Memory> Machine<M> {
         // (We don't do a full retag here, this is not considered creating a new pointer.)
         if let Some(layout) = ptr_type.safe_pointee() {
             assert!(layout.align.is_aligned(ptr.thin_pointer.addr)); // this was already checked when the value got created
-            self.mem.dereferenceable(ptr.thin_pointer, layout.size.compute(ptr.metadata))?;
+            self.mem.dereferenceable(ptr.thin_pointer, layout.size.compute(ptr.metadata, self.prog.vtables)?)?;
         }
         // Check whether this pointer is sufficiently aligned.
         // Don't error immediately though! Unaligned places can still be turned into raw pointers.
@@ -275,7 +275,7 @@ impl<M: Memory> Machine<M> {
             Type::Union { fields, .. } => fields[field],
             _ => panic!("field projection on non-projectable type"),
         };
-        assert!(offset <= ty.size::<M::T>().compute(root.ptr.metadata));
+        assert!(offset <= ty.size::<M::T>().compute(root.ptr.metadata, self.prog.vtables)?);
 
         let ptr = self.ptr_offset_inbounds(root.ptr.thin_pointer, offset.bytes())?;
         // TODO(UnsizedTypes): Field projections to the last field should retain the metadata.
@@ -304,7 +304,7 @@ impl<M: Memory> Machine<M> {
         let elem_size = elem_ty.size::<M::T>().expect_sized("WF ensures array & slice elements are sized");
         let offset = index * elem_size;
         assert!(
-            offset <= ty.size::<M::T>().compute(root.ptr.metadata),
+            offset <= ty.size::<M::T>().compute(root.ptr.metadata, self.prog.vtables)?,
             "sanity check: the indexed offset should not be outside what the type allows."
         );
 

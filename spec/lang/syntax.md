@@ -338,7 +338,8 @@ pub enum Terminator {
     },
     /// Call the given function with the given arguments.
     Call {
-        callee: ValueExpr,
+        /// What function or method to call.
+        callee: DispatchExpr,
         /// The calling convention to use for this call.
         calling_convention: CallingConvention,
         /// The arguments to pass.
@@ -351,6 +352,13 @@ pub enum Terminator {
     },
     /// Return from the current function.
     Return,
+}
+
+pub enum DispatchExpr { // or "CalleeExpr"
+    /// Evaluates to a pointer to an function. Currently always constant I think.
+    Static(ValueExpr), // or "FnPointer"
+    /// The function pointer has to be found as the method with the given index in the VTable referred to by the first argument wide pointer.
+    Dynamic(VTableIndex), // or "Virtual"
 }
 
 /// Function arguments can be passed by-value or in-place.
@@ -427,6 +435,8 @@ pub struct Program {
     pub start: FnName,
     /// Associate each global name with the associated global.
     pub globals: Map<GlobalName, Global>,
+    /// Store the vtables with function names for each vtablename.
+    pub vtables: Map<VTableName, VTable>,
 }
 
 /// Opaque types of names for local variables and basic blocks.

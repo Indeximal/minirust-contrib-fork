@@ -232,14 +232,38 @@ impl<M: Memory> Machine<M> {
         self.prepare_for_inplace_passing(caller_ret_place, caller_ret_ty)?;
 
         // Then evaluate the function that will be called.
-        let (Value::Ptr(Pointer { thin_pointer: ptr, .. }), Type::Ptr(PtrType::FnPtr)) = self.eval_value(callee)? else {
-            panic!("call on a non-pointer")
+        let func = match callee {
+            DispatchExpr::Static(expr) => {
+                let (Value::Ptr(Pointer { thin_pointer: ptr, .. }), Type::Ptr(PtrType::FnPtr)) = self.eval_value(callee)? else {
+                    panic!("call on a non-pointer");
+                };
+                self.fn_from_addr(ptr.addr)?
+            }
+            DispatchExpr::Dynamic(idx) => {
+                let (Value::Ptr(Pointer { thin_pointer, metadata }), _) = self.eval_argument(arguments[0])? else {
+                    panic!("dynamic dispatch call with non-pointer first argument");
+                };
+                let PointerMeta::VTablePointer(vtablename) = metadata else {
+                    panic!("dynamic dispatch call with non-trait-object-pointer first argument");
+                };
+                // TODO(UnsizedTypes): Check provenance of `vtablename` as well. Or maybe this is done while decoding?
+                let Some(vtable) = self.prog.vtables.get(vtablename) else {
+                    throw_ub!("no vtable with given name exists");
+                };
+                let Some(fn_name) = vtable.methods.get(idx) else {
+                    throw_ub!("the referenced vtable does not have an entry for the invoked method");
+                };
+                let Some(func) = self.prog.functions.get(fn_name) else {
+                    panic!("vtable entry points to non-existing function");
+                };
+                func
+            }
         };
-        let func = self.fn_from_addr(ptr.addr)?;
 
         // Then evaluate the arguments.
         // FIXME: this means if an argument reads from `caller_ret_place`, the contents
         // of that have already been de-initialized. Is that the intended behavior?
+        // TODO(UnsizedTypes): Convert the type of the first argument on dynamic dispatch: make it a thin pointer & include PointeeInfo
         let arguments = arguments.try_map(|arg| self.eval_argument(arg))?;
 
         // Set up the stack frame.
