@@ -36,6 +36,7 @@ pub struct ThinPointer<Provenance> {
 /// The runtime metadata that can be stored in a wide pointer.
 pub enum PointerMeta {
     ElementCount(Int),
+    // Maybe this should be a ThinPointer instead.
     VTablePointer(VTableName), // with `Option<Provenance>` ? or alternatively have 1 name be undefined on purpose, and set that one when decoding ?
 }
 

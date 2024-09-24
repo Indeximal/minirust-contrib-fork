@@ -129,6 +129,7 @@ impl PointerMetaKind {
         match self {
             PointerMetaKind::None => None,
             PointerMetaKind::ElementCount => Some(Type::Int(IntType { signed: Unsigned, size: T::PTR_SIZE })),
+            PointerMetaKind::VTablePointer => Some(Type::Ptr(PtrType::VTableName)),
         }
     }
 }
@@ -159,6 +160,8 @@ impl PointerMeta {
     fn into_value<M: Memory>(self) -> Value<M> {
         match self {
             PointerMeta::ElementCount(count) => Value::Int(count),
+            // FIXME(UnsizedTypes): Do we do the Name/Address conversion here?
+            PointerMeta::VTablePointer(ptr) => Value::Ptr(ptr.widen(None)),
         }
     }
 }
