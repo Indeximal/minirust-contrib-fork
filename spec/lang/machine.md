@@ -42,6 +42,9 @@ pub struct Machine<M: Memory> {
     /// Stores an address for each function name.
     fn_addrs: Map<FnName, mem::Address>,
 
+    /// Stores an address for each vtable name.
+    vtable_addrs: Map<VTableName, mem::Address>,
+
     /// This is where the `PrintStdout` intrinsic writes to.
     stdout: DynWrite,
     /// This is where the `PrintStderr` intrinsic writes to.

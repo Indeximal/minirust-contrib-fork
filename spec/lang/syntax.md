@@ -52,6 +52,7 @@ pub enum ValueExpr {
     /// with the `self` argument appropriately cast to a sized pointer type.
     VTableLookup {
         /// Must be a wide pointer to a trait object.
+        #[specr::indirection]
         expr: ValueExpr,
         /// Specifies which function of the vtable to look up.
         /// Depends on the trait, which is not represented here.
@@ -98,6 +99,8 @@ pub enum Constant {
     GlobalPointer(Relocation),
     /// A pointer pointing to a function.
     FnPointer(FnName),
+    /// A pointer pointing to a vtable.
+    VTablePointer(VTableName),
     /// A pointer with constant address, not pointing into any allocation.
     PointerWithoutProvenance(Address),
 }

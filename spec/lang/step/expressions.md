@@ -43,6 +43,12 @@ impl<M: Memory> Machine<M> {
                     provenance: None,
                 }.widen(None))
             },
+            Constant::VTablePointer(vtable_name) => {
+                Value::Ptr(ThinPointer {
+                    addr: self.vtable_addrs[vtable_name],
+                    provenance: None,
+                }.widen(None))
+            },
             Constant::PointerWithoutProvenance(addr) => {
                 Value::Ptr(ThinPointer {
                     addr,

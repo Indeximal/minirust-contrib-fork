@@ -236,6 +236,10 @@ impl Constant {
                 ensure_wf(matches!(ptr_ty, PtrType::FnPtr), "Constant::FnPointer: non function pointer type")?;
                 ensure_wf(prog.functions.contains_key(fn_name), "Constant::FnPointer: invalid function name")?;
             }
+            (Constant::VTablePointer(vtable_name), Type::Ptr(ptr_ty)) => {
+                ensure_wf(matches!(ptr_ty, PtrType::VTableName), "Constant::VTablePointer: non vtable pointer type")?;
+                ensure_wf(prog.vtables.contains_key(vtable_name), "Constant::VTablePointer: invalid vtable name")?;
+            }
             (Constant::PointerWithoutProvenance(addr), Type::Ptr(_)) => {
                 ensure_wf(
                     addr.in_bounds(Signedness::Unsigned, T::PTR_SIZE),
