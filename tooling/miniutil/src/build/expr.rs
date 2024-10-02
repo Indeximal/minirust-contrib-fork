@@ -295,7 +295,7 @@ pub fn global<T: TypeConv>(x: u32) -> PlaceExpr {
     global_by_name::<T>(GlobalName(Name::from_internal(x)))
 }
 
-pub fn vtable_lookup(operand: ValueExpr, method: VTableIndex) -> ValueExpr {
+pub fn vtable_lookup(operand: ValueExpr, method: TraitMethodName) -> ValueExpr {
     ValueExpr::VTableLookup { expr: GcCow::new(operand), method }
 }
 

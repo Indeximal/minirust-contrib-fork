@@ -31,7 +31,7 @@ fn dynamic_dispatch() {
         p.finish_function(f)
     };
 
-    let method_a_foo = p.fresh_vtable_index();
+    let method_a_foo = p.fresh_trait_method_name();
 
     let mut usize_a_vtable = p.declare_vtable(<usize>::get_type());
     usize_a_vtable.add_method(method_a_foo, impl_a_foo_for_usize);

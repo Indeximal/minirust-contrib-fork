@@ -104,7 +104,7 @@ impl<T: TypeConv> TypeConv for [T] {
 // TODO(UnsizedTypes): is this needed?
 impl TypeConv for dyn std::any::Any {
     fn get_type() -> Type {
-        trait_object_ty!()
+        trait_object_ty()
     }
 }
 

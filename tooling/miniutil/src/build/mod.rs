@@ -46,7 +46,7 @@ pub struct ProgramBuilder {
     next_fn: u32,
     next_global: u32,
     next_vtable: u32,
-    next_vtable_index: u32,
+    next_trait_method_name: u32,
 }
 
 impl ProgramBuilder {
@@ -58,7 +58,7 @@ impl ProgramBuilder {
             next_fn: 0,
             next_global: 0,
             next_vtable: 0,
-            next_vtable_index: AtomicU32::new(0),
+            next_trait_method_name: 0,
         }
     }
 
@@ -103,10 +103,10 @@ impl ProgramBuilder {
         name
     }
 
-    pub fn fresh_vtable_index(&mut self) -> VTableIndex {
-        let idx = self.next_vtable_index;
-        self.next_vtable_index += 1;
-        VTableIndex(Name::from_internal(idx))
+    pub fn fresh_trait_method_name(&mut self) -> TraitMethodName {
+        let idx = self.next_trait_method_name;
+        self.next_trait_method_name += 1;
+        TraitMethodName(Name::from_internal(idx))
     }
 }
 
@@ -237,7 +237,7 @@ pub struct VTableBuilder {
     name: VTableName,
     size: Size,
     align: Align,
-    methods: Map<VTableIndex, FnName>,
+    methods: Map<TraitMethodName, FnName>,
 }
 
 impl VTableBuilder {
@@ -249,12 +249,12 @@ impl VTableBuilder {
         self.name
     }
 
-    pub fn add_method(&mut self, index: VTableIndex, func: FnName) {
+    pub fn add_method(&mut self, index: TraitMethodName, func: FnName) {
         self.methods.insert(index, func);
     }
 
     #[track_caller]
-    fn finish_vtable(mut self) -> VTable {
+    fn finish_vtable(self) -> VTable {
         VTable { size: self.size, align: self.align, methods: self.methods }
     }
 }
