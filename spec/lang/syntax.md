@@ -17,10 +17,8 @@ Obviously, these are all quite incomplete still.
 pub enum ValueExpr {
     /// Just return a constant value.
     Constant(Constant, Type),
-
     /// An n-tuple, used for arrays, structs, tuples (including unit).
     Tuple(List<ValueExpr>, Type),
-
     /// A `Union` value.
     Union {
         /// The union's field which will be initialized.
@@ -31,7 +29,6 @@ pub enum ValueExpr {
         /// The union type, needs to be `Type::Union`
         union_ty: Type,
     },
-
     /// A variant of an enum type.
     Variant {
         /// The discriminant of the variant.
@@ -42,7 +39,6 @@ pub enum ValueExpr {
         /// The enum type, needs to be `Type::Enum`.
         enum_ty: Type,
     },
-
     /// Read the discriminant of an enum type.
     /// As we don't need to know the validity of the inner data
     /// we don't fully load the variant value.
@@ -51,7 +47,16 @@ pub enum ValueExpr {
         #[specr::indirection]
         place: PlaceExpr,
     },
-
+    /// Lookup the function pointer for a trait object method.
+    /// Dynamic dispatch is represented as a `Call` to the result of this method,
+    /// with the `self` argument appropriately cast to a sized pointer type.
+    VTableLookup {
+        /// Must be a wide pointer to a trait object.
+        expr: ValueExpr,
+        /// Specifies which function of the vtable to look up.
+        /// Depends on the trait, which is not represented here.
+        method: VTableIndex,
+    },
     /// Load a value from memory.
     Load {
         /// The place to load from.
@@ -339,7 +344,8 @@ pub enum Terminator {
     /// Call the given function with the given arguments.
     Call {
         /// What function or method to call.
-        callee: DispatchExpr,
+        /// This must evaluate to a function pointer and for safe behaviour, the functions signature must match the arguments.
+        callee: ValueExpr,
         /// The calling convention to use for this call.
         calling_convention: CallingConvention,
         /// The arguments to pass.
@@ -352,13 +358,6 @@ pub enum Terminator {
     },
     /// Return from the current function.
     Return,
-}
-
-pub enum DispatchExpr { // or "CalleeExpr"
-    /// Evaluates to a pointer to an function. Currently always constant I think.
-    Static(ValueExpr), // or "FnPointer"
-    /// The function pointer has to be found as the method with the given index in the VTable referred to by the first argument wide pointer.
-    Dynamic(VTableIndex), // or "Virtual"
 }
 
 /// Function arguments can be passed by-value or in-place.

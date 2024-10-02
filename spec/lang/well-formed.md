@@ -316,6 +316,14 @@ impl ValueExpr {
                 };
                 Type::Int(discriminant_ty)
             }
+            VTableLookup { expr, method } => {
+                let Type::Ptr(ptr_ty) = expr.check_wf::<T>(locals, prog)? else {
+                    throw_ill_formed!("ValueExpr::VTableLookup: invalid type");
+                };
+                ensure_wf(ptr_ty.meta_kind() == PointerMetaKind::VTablePointer, "ValueExpr::VTableLookup: invalid pointee")?;
+
+                Type::Ptr(PtrType::FnPtr)
+            }
             Load { source } => {
                 let val_ty = source.check_wf::<T>(locals, prog)?;
                 ensure_wf(val_ty.size::<T>().is_sized(), "ValueExpr::Load: unsized value type")?;

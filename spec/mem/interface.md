@@ -139,8 +139,6 @@ pub trait Memory {
 
     /// Check if there are any memory leaks.
     fn leak_check(&self) -> Result;
-
-    // FIXME(UnsizedTypes): Do we need a new method here? `lookup_vtable(addr) -> VTable` ?
 }
 ```
 

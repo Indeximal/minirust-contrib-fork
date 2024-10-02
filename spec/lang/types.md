@@ -89,7 +89,7 @@ pub enum Type {
     /// I actually think this is not used at all in MiniRust. Since an `dyn Foo` Place can do nothing, not assigning to it, 
     /// not field or index projection.
     /// It might be used in minimize. ??
-    // TraitObject,
+    TraitObject,
 }
 
 pub struct IntType {
