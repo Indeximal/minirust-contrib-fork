@@ -57,6 +57,8 @@ pub enum AllocationKind {
     Global,
     /// Memory for a function.
     Function,
+    /// Memory for a vtable.
+    VTable,
 }
 
 /// *Note*: All memory operations can be non-deterministic, which means that
@@ -116,6 +118,8 @@ pub trait Memory {
     /// This must at least check that the pointer is `dereferenceable` for its size
     // (IOW, it cannot be more defined than the default implementation).
     ///
+    /// The `size_computer` is given, since computing the size requires information about vtables.
+    /// 
     /// Return the retagged pointer.
     fn retag_ptr(
         &mut self,
@@ -123,10 +127,10 @@ pub trait Memory {
         ptr: Pointer<Self::Provenance>,
         ptr_type: PtrType,
         _fn_entry: bool,
+        size_computer: impl Fn(SizeStrategy, Option<PointerMeta>) -> Result<Size>,
     ) -> Result<Pointer<Self::Provenance>> {
         if let Some(layout) = ptr_type.safe_pointee() {
-            // FIXME: well here we don't have the vtable map ...
-            self.dereferenceable(ptr.thin_pointer, layout.size.compute(ptr.metadata))?;
+            self.dereferenceable(ptr.thin_pointer, size_computer(layout.size, ptr.metadata)?)?;
         }
         ret(ptr)
     }

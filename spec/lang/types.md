@@ -160,6 +160,7 @@ impl Type {
                 elem.size::<T>().expect_sized("WF ensures array element is sized") * count
             ),
             Slice { elem } => SizeStrategy::Slice(elem.size::<T>().expect_sized("WF ensures slice element is sized")),
+            TraitObject => SizeStrategy::TraitObject,
         }
     }
 
@@ -171,6 +172,8 @@ impl Type {
             Ptr(_) => T::PTR_ALIGN,
             Tuple { align, .. } | Union { align, .. } | Enum { align, .. } => align,
             Array { elem, .. } | Slice { elem } => elem.align::<T>(),
+            // FIXME: This is wrong, need to be encode in AlignStrategy.
+            TraitObject => T::PTR_ALIGN,
         }
     }
 
@@ -178,6 +181,7 @@ impl Type {
     pub fn meta_kind(self) -> PointerMetaKind {
         match self {
             Type::Slice { .. } => PointerMetaKind::ElementCount,
+            Type::TraitObject => PointerMetaKind::VTablePointer,
             _ => PointerMetaKind::None
         }
     }

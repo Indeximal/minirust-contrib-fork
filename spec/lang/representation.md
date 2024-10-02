@@ -153,6 +153,7 @@ impl PointerMeta {
     fn from_value<M: Memory>(value: Value<M>) -> Option<PointerMeta> {
         match value {
             Value::Int(count) => Some(PointerMeta::ElementCount(count)),
+            Value::Ptr(_ptr) => todo!("decode vtable ptr"),
             _ => None,
         }
     }
@@ -160,8 +161,7 @@ impl PointerMeta {
     fn into_value<M: Memory>(self) -> Value<M> {
         match self {
             PointerMeta::ElementCount(count) => Value::Int(count),
-            // FIXME(UnsizedTypes): Do we do the Name/Address conversion here?
-            PointerMeta::VTablePointer(ptr) => Value::Ptr(ptr.widen(None)),
+            PointerMeta::VTablePointer(_name) => todo!("encoce vtable ptr"),
         }
     }
 }
@@ -414,6 +414,15 @@ impl Type {
         panic!("tried to endoce a slice")
     }
 }
+
+impl Type {
+    fn decode<M: Memory>(Type::TraitObject: Self, bytes: List<AbstractByte<M::Provenance>>) -> Option<Value<M>> {
+        panic!("tried to decode a trait object")
+    }
+    fn encode<M: Memory>(Type::TraitObject: Self, val: Value<M>) -> List<AbstractByte<M::Provenance>> {
+        panic!("tried to endoce a trait object")
+    }
+}
 ```
 
 ## Generic properties
@@ -592,21 +601,24 @@ impl<M: Memory> ConcurrentMemory<M> {
     }
 
     /// Find all pointers in this value, ensure they are valid, and retag them.
-    fn retag_val(&mut self, frame_extra: &mut M::FrameExtra, val: Value<M>, ty: Type, fn_entry: bool) -> Result<Value<M>> {
+    fn retag_val(
+        &mut self, frame_extra: &mut M::FrameExtra, val: Value<M>, ty: Type, fn_entry: bool,
+        size_computer: impl Fn(SizeStrategy, Option<PointerMeta>) -> Result<Size> + Clone,
+    ) -> Result<Value<M>> {
         ret(match (val, ty) {
             // no (identifiable) pointers
             (Value::Int(..) | Value::Bool(..) | Value::Union(..), _) =>
                 val,
             // base case
             (Value::Ptr(ptr), Type::Ptr(ptr_type)) =>
-                Value::Ptr(self.retag_ptr(frame_extra, ptr, ptr_type, fn_entry)?),
+                Value::Ptr(self.retag_ptr(frame_extra, ptr, ptr_type, fn_entry, size_computer)?),
             // recurse into tuples/arrays/enums
             (Value::Tuple(vals), Type::Tuple { fields, .. }) =>
-                Value::Tuple(vals.zip(fields).try_map(|(val, (_offset, ty))| self.retag_val(frame_extra, val, ty, fn_entry))?),
+                Value::Tuple(vals.zip(fields).try_map(|(val, (_offset, ty))| self.retag_val(frame_extra, val, ty, fn_entry, size_computer.clone()))?),
             (Value::Tuple(vals), Type::Array { elem: ty, .. }) =>
-                Value::Tuple(vals.try_map(|val| self.retag_val(frame_extra, val, ty, fn_entry))?),
+                Value::Tuple(vals.try_map(|val| self.retag_val(frame_extra, val, ty, fn_entry, size_computer.clone()))?),
             (Value::Variant { discriminant, data }, Type::Enum { variants, .. }) =>
-                Value::Variant { discriminant, data: self.retag_val(frame_extra, data, variants[discriminant].ty, fn_entry)? },
+                Value::Variant { discriminant, data: self.retag_val(frame_extra, data, variants[discriminant].ty, fn_entry, size_computer)? },
             _ =>
                 panic!("this value does not have that type"),
         })

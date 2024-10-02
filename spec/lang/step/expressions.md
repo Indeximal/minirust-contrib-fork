@@ -141,15 +141,15 @@ The objects vtable must be for the trait the method belongs to, which is enforce
 ```rust
 impl<M: Memory> Machine<M> {
     fn eval_value(&mut self, ValueExpr::VTableLookup { expr, method } : ValueExpr) -> Result<(Value<M>, Type)> {
-        let (Value::Ptr(ptr), Type::Ptr(ptr_ty)) = self.eval_value(expr)? else {
+        let (Value::Ptr(ptr), Type::Ptr(_ptr_ty)) = self.eval_value(expr)? else {
             panic!("vtable loopup on non-pointer");
         };
-        let PointerMeta::VTablePointer(vtablename) = ptr.metadata else {
+        let Some(PointerMeta::VTablePointer(vtablename)) = ptr.metadata else {
             panic!("vtable loopup on non-trait-object-pointer");
         };
         // It is checked during decode that the vtablename is always valid.
         let vtable = self.prog.vtables[vtablename];
-        let Some(fn_name) = vtable.methods.get(idx) else {
+        let Some(fn_name) = vtable.methods.get(method) else {
             // This would be a type error, but since we don't store the trait, we do not type check this.
             throw_ub!("the referenced vtable does not have an entry for the invoked method");
         };
@@ -204,8 +204,9 @@ impl<M: Memory> Machine<M> {
             throw_ub!("taking the address of an invalid (null, misaligned, or uninhabited) place");
         }
         // Let the aliasing model know. (Will also check dereferenceability if appropriate.)
+        let size_computer = self.size_computer();
         let ptr = self.mutate_cur_frame(|frame, mem| {
-            mem.retag_ptr(&mut frame.extra, place.ptr, ptr_ty, /* fn_entry */ false)
+            mem.retag_ptr(&mut frame.extra, place.ptr, ptr_ty, /* fn_entry */ false, size_computer)
         })?;
         if !ptr_ty.meta_kind().matches(ptr.metadata) {
             // The metadata kind is checked in WF.

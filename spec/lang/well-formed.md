@@ -33,6 +33,7 @@ impl SizeStrategy {
         match self {
             SizeStrategy::Sized(size) => { ensure_wf(T::valid_size(size), "SizeStrategy: size not valid")?; }
             SizeStrategy::Slice(size) => { ensure_wf(T::valid_size(size), "SizeStrategy: element size not valid")?; }
+            SizeStrategy::TraitObject => (),
         };
 
         ret(())
@@ -46,6 +47,8 @@ impl SizeStrategy {
             SizeStrategy::Slice(size) => {
                 ensure_wf(size.bytes() % align.bytes() == 0, "check_aligned_to: element size not a multiple of alignment")?;
             }
+            // FIXME(UnsizedTypes): Do we need some information to check alignment here?
+            SizeStrategy::TraitObject => (),
         };
 
         ret(())
@@ -68,7 +71,7 @@ impl PtrType {
             PtrType::Ref { pointee, .. } | PtrType::Box { pointee } => {
                 pointee.check_wf::<T>()?;
             }
-            PtrType::Raw { .. } | PtrType::FnPtr => ()
+            PtrType::Raw { .. } | PtrType::FnPtr | PtrType::VTablePtr => ()
         }
 
         ret(())
@@ -176,6 +179,7 @@ impl Type {
                 // can be represented by the discriminant type.
                 discriminator.check_wf::<T>(size, variants)?;
             }
+            TraitObject => (),
         }
 
         // Now that we know the type is well-formed,
@@ -320,11 +324,14 @@ impl ValueExpr {
                 };
                 Type::Int(discriminant_ty)
             }
-            VTableLookup { expr, method } => {
+            VTableLookup { expr, method: _ } => {
                 let Type::Ptr(ptr_ty) = expr.check_wf::<T>(locals, prog)? else {
                     throw_ill_formed!("ValueExpr::VTableLookup: invalid type");
                 };
                 ensure_wf(ptr_ty.meta_kind() == PointerMetaKind::VTablePointer, "ValueExpr::VTableLookup: invalid pointee")?;
+
+                // We do not statically have enough information to check that the method name exists in the right vtable,
+                // but this is only a type safety problem, which we don't catch anyways.
 
                 Type::Ptr(PtrType::FnPtr)
             }
@@ -738,6 +745,8 @@ impl Relocation {
     }
 }
 
+// TODO(UnsizedTypes): WF for VTables
+
 impl Program {
     fn check_wf<T: Target>(self) -> Result<()> {
         // Check all the functions.
@@ -816,6 +825,7 @@ impl<M: Memory> Value<M> {
                 data.check_wf(variant.ty)?;
             }
             (_, Type::Slice { .. }) => throw_ill_formed!("Value: slices cannot be represented as values"),
+            (_, Type::TraitObject) => throw_ill_formed!("Value: trait objects cannot be represented as values"),
             _ => throw_ill_formed!("Value: value does not match type")
         }
 

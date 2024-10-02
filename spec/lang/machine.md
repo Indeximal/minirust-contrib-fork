@@ -125,6 +125,7 @@ impl<M: Memory> Machine<M> {
         let mut mem = ConcurrentMemory::<M>::new();
         let mut global_ptrs = Map::new();
         let mut fn_addrs = Map::new();
+        let mut vtable_addrs = Map::new();
 
         // Allocate every global.
         for (global_name, global) in prog.globals {
@@ -159,6 +160,15 @@ impl<M: Memory> Machine<M> {
             fn_addrs.insert(fn_name, addr);
         }
 
+        // Allocate vtables.
+        for (vtable_name, _vtable) in prog.vtables {
+            let alloc = mem.allocate(AllocationKind::VTable, Size::ZERO, Align::ONE)?;
+            let addr = alloc.addr;
+            // Ensure that no two vtables lie on the same address.
+            assert!(!vtable_addrs.values().any(|v_addr| addr == v_addr));
+            vtable_addrs.insert(vtable_name, addr);
+        }
+
         // Create machine, without a thread yet.
         let mut machine = Machine {
             prog,
@@ -166,6 +176,7 @@ impl<M: Memory> Machine<M> {
             intptrcast: IntPtrCast::new(),
             global_ptrs,
             fn_addrs,
+            vtable_addrs,
             threads: list![],
             locks: List::new(),
             active_thread: ThreadId::ZERO,
@@ -340,6 +351,13 @@ impl<M: Memory> Machine<M> {
         let prev_accesses = self.mem.reset_accesses();
 
         (prev_sync, prev_accesses)
+    }
+
+    fn size_computer(&self) -> impl Fn(SizeStrategy, Option<PointerMeta>) -> Result<Size> + Clone {
+        let vtables: Map<VTableName, VTable> = self.prog.vtables;
+        move |size, meta| {
+            size.compute(meta, vtables)
+        }
     }
 }
 ```
