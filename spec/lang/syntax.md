@@ -56,7 +56,7 @@ pub enum ValueExpr {
         expr: ValueExpr,
         /// Specifies which function of the vtable to look up.
         /// Depends on the trait, which is not represented here.
-        method: VTableIndex,
+        method: TraitMethodName,
     },
     /// Load a value from memory.
     Load {
@@ -424,9 +424,10 @@ pub enum IntrinsicOp {
 Finally, the general structure of programs and functions:
 
 ```rust
-/// Opaque types of names for functions and globals.
+/// Opaque types of names for functions, trait methods and globals.
 /// The internal representations of these types do not matter.
 pub struct FnName(pub libspecr::Name);
+pub struct TraitMethodName(pub libspecr::Name);
 pub struct GlobalName(pub libspecr::Name);
 
 /// A closed MiniRust program.
@@ -437,7 +438,7 @@ pub struct Program {
     pub start: FnName,
     /// Associate each global name with the associated global.
     pub globals: Map<GlobalName, Global>,
-    /// Store the vtables with function names for each vtablename.
+    /// Store the vtables with function names for each vtable name.
     pub vtables: Map<VTableName, VTable>,
 }
 
@@ -486,5 +487,14 @@ pub struct Relocation {
     pub name: GlobalName,
     /// The offset within that allocation.
     pub offset: Offset,
+}
+
+/// A vtable for a trait-type pair.
+/// This is pointed to by the trait object metadata.
+pub struct VTable {
+    pub size: Size,
+    pub align: Align,
+    /// The implementations of trait methods.
+    pub methods: Map<TraitMethodName, FnName>
 }
 ```

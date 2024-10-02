@@ -129,7 +129,7 @@ impl PointerMetaKind {
         match self {
             PointerMetaKind::None => None,
             PointerMetaKind::ElementCount => Some(Type::Int(IntType { signed: Unsigned, size: T::PTR_SIZE })),
-            PointerMetaKind::VTablePointer => Some(Type::Ptr(PtrType::VTableName)),
+            PointerMetaKind::VTablePointer => Some(Type::Ptr(PtrType::VTablePtr)),
         }
     }
 }

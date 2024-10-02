@@ -133,7 +133,7 @@ They *do* have a mutability since that is (or will be) relevant for the memory m
 
 ## Layout of a type
 
-Here we define how to compute the size and other layout properties of a type.
+Here we define the size and other layout properties of a type.
 
 ```rust
 impl IntType {
@@ -179,6 +179,53 @@ impl Type {
         match self {
             Type::Slice { .. } => PointerMetaKind::ElementCount,
             _ => PointerMetaKind::None
+        }
+    }
+}
+```
+
+And we also define how to compute the actual size, based on additional state.
+
+```rust
+impl SizeStrategy {
+    pub fn is_sized(self) -> bool {
+        matches!(self, SizeStrategy::Sized(_))
+    }
+
+    /// Returns the size when the type must be statically sized.
+    pub fn expect_sized(self, msg: &str) -> Size {
+        match self {
+            SizeStrategy::Sized(size) => size,
+            _ => panic!("expect_sized called on unsized type: {msg}"),
+        }
+    }
+
+    /// Computes the dynamic size, but the caller must provide compatible metadata.
+    pub fn compute(self, meta: Option<PointerMeta>, vtables: Map<VTableName, VTable>) -> Result<Size> {
+        match (self, meta) {
+            (SizeStrategy::Sized(size), None) => ret(size),
+            (SizeStrategy::Slice(elem_size), Some(PointerMeta::ElementCount(count))) => {
+                let raw_size = count * elem_size;
+                // FIXME(UnsizedTypes): We need to assert that the resulting size isn't too big.
+                ret(raw_size)
+            }
+            (SizeStrategy::TraitObject, Some(PointerMeta::VTablePointer(vtable_name))) => {
+                let Some(vtable) = vtables.get(vtable_name) else {
+                    throw_ub!("Computing the size of a trait object with invalid vtable in pointer");
+                };
+                ret(vtable.size)
+            }
+            _ => panic!("pointer meta data does not match type"),
+        }
+    }
+
+    /// Returns the metadata kind which is needed to compute this strategy,
+    /// i.e `self.meta_kind().matches(meta)` implies `self.compute(meta, _)` does not panic.
+    pub fn meta_kind(self) -> PointerMetaKind {
+        match self {
+            SizeStrategy::Sized(_) => PointerMetaKind::None,
+            SizeStrategy::Slice(_) => PointerMetaKind::ElementCount,
+            SizeStrategy::TraitObject => PointerMetaKind::VTablePointer,
         }
     }
 }

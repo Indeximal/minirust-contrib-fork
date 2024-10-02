@@ -237,7 +237,7 @@ impl Constant {
                 ensure_wf(prog.functions.contains_key(fn_name), "Constant::FnPointer: invalid function name")?;
             }
             (Constant::VTablePointer(vtable_name), Type::Ptr(ptr_ty)) => {
-                ensure_wf(matches!(ptr_ty, PtrType::VTableName), "Constant::VTablePointer: non vtable pointer type")?;
+                ensure_wf(matches!(ptr_ty, PtrType::VTablePtr), "Constant::VTablePointer: non vtable pointer type")?;
                 ensure_wf(prog.vtables.contains_key(vtable_name), "Constant::VTablePointer: invalid vtable name")?;
             }
             (Constant::PointerWithoutProvenance(addr), Type::Ptr(_)) => {
@@ -786,6 +786,7 @@ impl<M: Memory> Value<M> {
             }
             (Value::Bool(_), Type::Bool) => {},
             (Value::Ptr(ptr), Type::Ptr(ptr_ty)) => {
+                // TODO(UnsizedTypes): ensure metadata is well formed: element count should not lead to overflowing size & vtable exists.
                 ensure_wf(ptr_ty.meta_kind().matches(ptr.metadata), "Value::Ptr: invalid metadata")?;
                 ensure_wf(ptr_ty.addr_valid(ptr.thin_pointer.addr), "Value::Ptr: invalid pointer address")?;
                 ensure_wf(ptr.thin_pointer.addr.in_bounds(Unsigned, M::T::PTR_SIZE), "Value::Ptr: pointer out-of-bounds")?;

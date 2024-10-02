@@ -136,7 +136,7 @@ impl<M: Memory> Machine<M> {
 Dynamic dispatch in MiniRust is represented as a `Call` to the result of an explicit `VTableLookup` expression.
 This expression works on a wide pointer to a trait object, which contains the name for the objects vtable in the metadata.
 Which method is invoked is represented by the `method` parameter, which corresponds to a function of the trait.
-The objects vtable must be for the trait the method belongs to, which is enforced by keeping `VTableIndex`' globally unique.
+The objects vtable must be for the trait the method belongs to, which is enforced by keeping `TraitMethodName`' globally unique.
 
 ```rust
 impl<M: Memory> Machine<M> {

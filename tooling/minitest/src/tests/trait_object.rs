@@ -49,7 +49,7 @@ fn dynamic_dispatch() {
             addr_of(x, raw_void_ptr_ty()),
             ValueExpr::Constant(
                 Constant::VTablePointer(usize_a_vtable),
-                Type::Ptr(PtrType::VTableName),
+                Type::Ptr(PtrType::VTablePtr),
             ),
             <&dyn std::any::Any>::get_type(),
         );
