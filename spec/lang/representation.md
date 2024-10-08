@@ -149,11 +149,16 @@ impl PtrType {
     }
 }
 
-impl PointerMeta {
-    fn from_value<M: Memory>(value: Value<M>) -> Option<PointerMeta> {
+impl<Provenance> PointerMeta<Provenance> {
+    fn from_value<M: Memory>(value: Value<M>) -> Option<PointerMeta<Provenance>> 
+        // FIXME: ensure this bound somehow
+        where M::Provenance == Provenance 
+    {
         match value {
             Value::Int(count) => Some(PointerMeta::ElementCount(count)),
-            Value::Ptr(_ptr) => todo!("decode vtable ptr"),
+            // This can already be considered UB, if the vtable addr is invalid,
+            // but we can't check this here.
+            Value::Ptr(ptr) => Some(PointerMeta::VTablePointer(ptr.thin_pointer)),
             _ => None,
         }
     }
@@ -161,7 +166,7 @@ impl PointerMeta {
     fn into_value<M: Memory>(self) -> Value<M> {
         match self {
             PointerMeta::ElementCount(count) => Value::Int(count),
-            PointerMeta::VTablePointer(_name) => todo!("encoce vtable ptr"),
+            PointerMeta::VTablePointer(ptr) => Value::Ptr(ptr.widen(None)),
         }
     }
 }
@@ -176,7 +181,7 @@ impl Type {
             let Value::Ptr(ptr) = parts[0] else {
                 panic!("as_wide_pair always returns tuple with the first field being a thin pointer");
             };
-            let meta = PointerMeta::from_value(parts[1]);
+            let meta = PointerMeta::<M::Provenance>::from_value(parts[1]);
             assert!(meta.is_some(), "as_wide_pair always returns a suitable metadata type");
             ret(Value::Ptr(ptr.thin_pointer.widen(meta)))
         } else {

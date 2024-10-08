@@ -37,18 +37,18 @@ pub struct ThinPointer<Provenance> {
 }
 
 /// The runtime metadata that can be stored in a wide pointer.
-pub enum PointerMeta {
+pub enum PointerMeta<Provenance> {
     /// The metadata counts the number of elements in the slice.
     ElementCount(Int),
     /// The metadata points to a vtable referred to by this name.
-    VTablePointer(VTableName),
+    VTablePointer(ThinPointer<Provenance>),
 }
 
 /// A "pointer" is the thin pointer with optionally some metadata, making it a wide pointer.
 /// This corresponds to the Rust raw pointer types, as well as references and boxes.
 pub struct Pointer<Provenance> {
     pub thin_pointer: ThinPointer<Provenance>,
-    pub metadata: Option<PointerMeta>,
+    pub metadata: Option<PointerMeta<Provenance>>,
 }
 
 /// The statically known kind of metadata stored with a pointer.
@@ -68,7 +68,7 @@ impl<Provenance> ThinPointer<Provenance> {
         ThinPointer { addr, ..self }
     }
 
-    pub fn widen(self, metadata: Option<PointerMeta>) -> Pointer<Provenance> {
+    pub fn widen(self, metadata: Option<PointerMeta<Provenance>>) -> Pointer<Provenance> {
         Pointer {
             thin_pointer: self,
             metadata,
@@ -76,7 +76,7 @@ impl<Provenance> ThinPointer<Provenance> {
     }
 }
 
-impl PointerMeta {
+impl PointerMeta<Provenance> {
     pub fn meta_kind(self) -> PointerMetaKind {
         match self {
             PointerMeta::ElementCount(_) => PointerMetaKind::ElementCount,
@@ -86,7 +86,7 @@ impl PointerMeta {
 }
 
 impl PointerMetaKind {
-    pub fn matches(self, meta: Option<PointerMeta>) -> bool {
+    pub fn matches(self, meta: Option<PointerMeta<Provenance>>) -> bool {
         let expected_kind = meta.map(PointerMeta::meta_kind).unwrap_or(PointerMetaKind::None);
         self == expected_kind
     }

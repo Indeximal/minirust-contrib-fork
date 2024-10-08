@@ -144,11 +144,10 @@ impl<M: Memory> Machine<M> {
         let (Value::Ptr(ptr), Type::Ptr(_ptr_ty)) = self.eval_value(expr)? else {
             panic!("vtable loopup on non-pointer");
         };
-        let Some(PointerMeta::VTablePointer(vtablename)) = ptr.metadata else {
+        let Some(PointerMeta::VTablePointer(vtableptr)) = ptr.metadata else {
             panic!("vtable loopup on non-trait-object-pointer");
         };
-        // It is checked during decode that the vtablename is always valid.
-        let vtable = self.prog.vtables[vtablename];
+        let vtable = self.vtable_from_addr(vtableptr.addr)?;
         let Some(fn_name) = vtable.methods.get(method) else {
             // This would be a type error, but since we don't store the trait, we do not type check this.
             throw_ub!("the referenced vtable does not have an entry for the invoked method");
@@ -291,7 +290,8 @@ impl<M: Memory> Machine<M> {
         // (We don't do a full retag here, this is not considered creating a new pointer.)
         if let Some(layout) = ptr_type.safe_pointee() {
             assert!(layout.align.is_aligned(ptr.thin_pointer.addr)); // this was already checked when the value got created
-            self.mem.dereferenceable(ptr.thin_pointer, layout.size.compute(ptr.metadata, self.prog.vtables)?)?;
+            let size = layout.size.compute(ptr.metadata, |ptr| self.vtable_from_addr(ptr.addr))?;
+            self.mem.dereferenceable(ptr.thin_pointer, size)?;
         }
         // Check whether this pointer is sufficiently aligned.
         // Don't error immediately though! Unaligned places can still be turned into raw pointers.

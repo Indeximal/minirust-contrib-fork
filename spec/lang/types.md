@@ -205,18 +205,20 @@ impl SizeStrategy {
     }
 
     /// Computes the dynamic size, but the caller must provide compatible metadata.
-    pub fn compute(self, meta: Option<PointerMeta>, vtables: Map<VTableName, VTable>) -> Result<Size> {
+    pub fn compute<Provenance>(
+        self,
+        meta: Option<PointerMeta<Provenance>>,
+        vtable_lookup: impl FnOnce(ThinPointer<Provenance>) -> Result<VTable>
+    ) -> Result<Size> {
         match (self, meta) {
             (SizeStrategy::Sized(size), None) => ret(size),
             (SizeStrategy::Slice(elem_size), Some(PointerMeta::ElementCount(count))) => {
                 let raw_size = count * elem_size;
-                // FIXME(UnsizedTypes): We need to assert that the resulting size isn't too big.
+                // FIXME(UnsizedTypes): We need to raise UB if the resulting size is too big.
                 ret(raw_size)
             }
-            (SizeStrategy::TraitObject, Some(PointerMeta::VTablePointer(vtable_name))) => {
-                let Some(vtable) = vtables.get(vtable_name) else {
-                    throw_ub!("Computing the size of a trait object with invalid vtable in pointer");
-                };
+            (SizeStrategy::TraitObject, Some(PointerMeta::VTablePointer(vtable_ptr))) => {
+                let vtable = vtable_lookup(vtable_ptr)?;
                 ret(vtable.size)
             }
             _ => panic!("pointer meta data does not match type"),

@@ -336,6 +336,21 @@ impl<M: Memory> Machine<M> {
         ret(func)
     }
 
+    /// Look up a vtable given its address.
+    fn vtable_from_addr(&self, addr: mem::Address) -> Result<VTable> {
+        // FIXME(UnsizedTypes): Check Provenance ?
+        let mut vtables = self.vtable_addrs.iter().filter(|(_, v_addr)| *v_addr == addr);
+        let Some((vtable_name, _)) = vtables.next() else {
+            throw_ub!("dereferencing vtable pointer where there is no vtable");
+        };
+        if let Some(_) = vtables.next() {
+            panic!("there's more than one vtable with the same address!");
+        }
+        let vtable = self.prog.vtables[vtable_name];
+
+        ret(vtable)
+    }
+
     /// Reset the data race tracking for the next step, and return the information from the previous step.
     ///
     /// The first component of the return value is the set of threads that were synchronized by the previous step,
@@ -353,10 +368,15 @@ impl<M: Memory> Machine<M> {
         (prev_sync, prev_accesses)
     }
 
+    // TODO(UnsizedTypes): Replace with VtableLookup closure
     fn size_computer(&self) -> impl Fn(SizeStrategy, Option<PointerMeta>) -> Result<Size> + Clone {
-        let vtables: Map<VTableName, VTable> = self.prog.vtables;
+        // FIXME(UnsizedTypes): This has lifetime problems.
+        let vtable_lookup = |ptr| {
+            self.vtable_from_addr(ptr.addr)
+        };
+
         move |size, meta| {
-            size.compute(meta, vtables)
+            size.compute(meta, vtable_lookup)
         }
     }
 }
