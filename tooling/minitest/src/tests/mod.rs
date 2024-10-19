@@ -31,6 +31,7 @@ mod ptr;
 mod ptr_offset;
 mod ptr_offset_from;
 mod raw_eq;
+mod ref_ub;
 mod return_;
 mod size_of_val;
 mod slice;
