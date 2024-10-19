@@ -7,7 +7,7 @@ This is the *[representation relation]*, which is defined in the following.
 Unsized types cannot be represented as values and thus a call to `encode` or `decode` for such types can never occur in a well-formed program.
 
 [representation relation]: https://github.com/rust-lang/unsafe-code-guidelines/blob/master/reference/src/glossary.md#representation-relation
-[well-formed-value]: well-formed.md#well-formed-values
+[well-formed-value]: well-formed.md#well-formed-values TODO(UnsizedTypes): fix link
 
 ## Type-directed Encode/Decode of values
 
@@ -179,9 +179,6 @@ impl Type {
         } else {
             // Handle thin pointers.
             let ptr = decode_ptr::<M>(bytes)?;
-            if !ptr_type.addr_valid(ptr.addr) {
-                throw!();
-            }
             ret(Value::Ptr(ptr.widen(None)))
         }
     }
@@ -412,6 +409,77 @@ impl Type {
     }
 }
 ```
+
+## Value validity
+
+A type can have additional runtime validity properties that need to be met.
+These are defined here.
+
+```rust
+impl<M: Memory> Machine<M> {
+    /// We assume `ty` is itself well-formed.
+    fn check_value(&self, ty: Type, value: Value<M>) -> Result {
+        match (value, ty) {
+            (Value::Int(i), Type::Int(ity)) => {
+                ensure_wf(ity.can_represent(i), "Value::Int: invalid integer value")?;
+            }
+            (Value::Bool(_), Type::Bool) => {},
+            (Value::Ptr(ptr), Type::Ptr(ptr_ty)) => {
+                ensure_wf(ptr_ty.meta_kind().matches(ptr.metadata), "Value::Ptr: invalid metadata")?;
+                ensure_wf(ptr.thin_pointer.addr.in_bounds(Unsigned, M::T::PTR_SIZE), "Value::Ptr: pointer out-of-bounds")?;
+
+                if let Some(layout) = ptr_ty.safe_pointee() {
+                    // Safe addresses need to be non-null, aligned, dereferencable, and not point to an uninhabited type.
+                    // (Think: uninhabited types have impossible alignment.)
+                    let size = layout.size.compute(ptr.metadata);
+
+                    ensure_wf(ptr.thin_pointer.addr != 0, "Value::Ptr: null safe pointer")?;
+                    ensure_wf(layout.align.is_aligned(ptr.thin_pointer.addr) != 0, "Value::Ptr: unaligned safe pointer")?;
+                    ensure_wf(layout.inhabited, "Value::Ptr: safe pointer to uninhabited type")?;
+                    ensure_wf(
+                        self.memory.dereferencable(ptr.thin_pointer, size),
+                        "Value::Ptr: non-dereferencable safe pointer"
+                    )?;
+
+                    // The total size of slices must be at most `isize::MAX`.
+                    ensure_wf(size.bytes().in_bounds(Signed, M::T::PTR_SIZE));
+
+                    // In particular is it not UB, if the validity invariant of the pointee is broken.
+                }
+            }
+            (Value::Tuple(vals), Type::Tuple { fields, .. }) => {
+                ensure_wf(vals.len() == fields.len(), "Value::Tuple: invalid number of fields")?;
+                for (val, (_, ty)) in vals.zip(fields) {
+                    self.check_value(ty, val)?;
+                }
+            }
+            (Value::Tuple(vals), Type::Array { elem, count }) => {
+                ensure_wf(vals.len() == count, "Value::Tuple: invalid number of elements")?;
+                for val in vals {
+                    self.check_value(elem, val)?;
+                }
+            }
+            (Value::Union(chunk_data), Type::Union { chunks, .. }) => {
+                ensure_wf(chunk_data.len() == chunks.len(), "Value::Union: invalid chunk size")?;
+                for (data, (_, size)) in chunk_data.zip(chunks) {
+                    ensure_wf(data.len() == size.bytes(), "Value::Union: invalid chunk data")?;
+                }
+            }
+            (Value::Variant { discriminant, data }, Type::Enum { variants, .. }) => {
+                let Some(variant) = variants.get(discriminant) else {
+                    throw_ill_formed!("Value::Variant: invalid discrimant type");
+                };
+                self.check_value(variant.ty, data)?;
+            }
+            (_, Type::Slice { .. }) => throw_ill_formed!("Value: slices cannot be represented as values"),
+            _ => throw_ill_formed!("Value: value does not match type")
+        }
+
+        ret(())
+    }
+}
+```
+
 
 ## Generic properties
 
