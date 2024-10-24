@@ -418,10 +418,11 @@ These are defined here.
 ```rust
 impl<M: Memory> Machine<M> {
     /// We assume `ty` is itself well-formed.
-    fn check_value(&self, ty: Type, value: Value<M>) -> Result {
+    // FIXME: This should return UB, not Ill-formed errors.
+    fn check_value(&self, value: Value<M>, ty: Type) -> Result {
         match (value, ty) {
-            (Value::Int(i), Type::Int(ity)) => {
-                ensure_wf(ity.can_represent(i), "Value::Int: invalid integer value")?;
+            (Value::Int(i), Type::Int(int_ty)) => {
+                ensure_wf(int_ty.can_represent(i), "Value::Int: invalid integer value")?;
             }
             (Value::Bool(_), Type::Bool) => {},
             (Value::Ptr(ptr), Type::Ptr(ptr_ty)) => {
@@ -429,20 +430,20 @@ impl<M: Memory> Machine<M> {
                 ensure_wf(ptr.thin_pointer.addr.in_bounds(Unsigned, M::T::PTR_SIZE), "Value::Ptr: pointer out-of-bounds")?;
 
                 if let Some(layout) = ptr_ty.safe_pointee() {
-                    // Safe addresses need to be non-null, aligned, dereferencable, and not point to an uninhabited type.
+                    // Safe addresses need to be non-null, aligned, dereferenceable, and not point to an uninhabited type.
                     // (Think: uninhabited types have impossible alignment.)
                     let size = layout.size.compute(ptr.metadata);
 
                     ensure_wf(ptr.thin_pointer.addr != 0, "Value::Ptr: null safe pointer")?;
-                    ensure_wf(layout.align.is_aligned(ptr.thin_pointer.addr) != 0, "Value::Ptr: unaligned safe pointer")?;
+                    ensure_wf(layout.align.is_aligned(ptr.thin_pointer.addr), "Value::Ptr: unaligned safe pointer")?;
                     ensure_wf(layout.inhabited, "Value::Ptr: safe pointer to uninhabited type")?;
                     ensure_wf(
-                        self.memory.dereferencable(ptr.thin_pointer, size),
-                        "Value::Ptr: non-dereferencable safe pointer"
+                        self.mem.dereferenceable(ptr.thin_pointer, size).is_ok(),
+                        "Value::Ptr: non-dereferenceable safe pointer"
                     )?;
 
                     // The total size of slices must be at most `isize::MAX`.
-                    ensure_wf(size.bytes().in_bounds(Signed, M::T::PTR_SIZE));
+                    ensure_wf(size.bytes().in_bounds(Signed, M::T::PTR_SIZE), "Value::Ptr: total size exeeds isize::MAX")?;
 
                     // In particular is it not UB, if the validity invariant of the pointee is broken.
                 }
@@ -450,13 +451,13 @@ impl<M: Memory> Machine<M> {
             (Value::Tuple(vals), Type::Tuple { fields, .. }) => {
                 ensure_wf(vals.len() == fields.len(), "Value::Tuple: invalid number of fields")?;
                 for (val, (_, ty)) in vals.zip(fields) {
-                    self.check_value(ty, val)?;
+                    self.check_value(val, ty)?;
                 }
             }
             (Value::Tuple(vals), Type::Array { elem, count }) => {
                 ensure_wf(vals.len() == count, "Value::Tuple: invalid number of elements")?;
                 for val in vals {
-                    self.check_value(elem, val)?;
+                    self.check_value(val, elem)?;
                 }
             }
             (Value::Union(chunk_data), Type::Union { chunks, .. }) => {
@@ -469,7 +470,7 @@ impl<M: Memory> Machine<M> {
                 let Some(variant) = variants.get(discriminant) else {
                     throw_ill_formed!("Value::Variant: invalid discrimant type");
                 };
-                self.check_value(variant.ty, data)?;
+                self.check_value(data, variant.ty)?;
             }
             (_, Type::Slice { .. }) => throw_ill_formed!("Value: slices cannot be represented as values"),
             _ => throw_ill_formed!("Value: value does not match type")
@@ -638,26 +639,29 @@ This interface is inspired by [Cerberus](https://www.cl.cam.ac.uk/~pes20/cerberu
 We also lift retagging from pointers to compound values.
 
 ```rust
-impl<M: Memory> ConcurrentMemory<M> {
+impl<M: Memory> Machine<M> {
     fn typed_store(&mut self, ptr: ThinPointer<M::Provenance>, val: Value<M>, ty: Type, align: Align, atomicity: Atomicity) -> Result {
-        assert!(val.check_wf(ty).is_ok(), "trying to store {val:?} which is ill-formed for {:#?}", ty);
+        // FIXME: can we still assume this is store?
+        assert!(self.check_value(val, ty).is_ok(), "trying to store {val:?} which is ill-formed for {:#?}", ty);
         let bytes = ty.encode::<M>(val);
-        self.store(ptr, bytes, align, atomicity)?;
+        self.mem.store(ptr, bytes, align, atomicity)?;
 
         ret(())
     }
 
     fn typed_load(&mut self, ptr: ThinPointer<M::Provenance>, ty: Type, align: Align, atomicity: Atomicity) -> Result<Value<M>> {
-        let bytes = self.load(ptr, ty.size::<M::T>().expect_sized("the callers ensure `ty` is sized"), align, atomicity)?;
+        let bytes = self.mem.load(ptr, ty.size::<M::T>().expect_sized("the callers ensure `ty` is sized"), align, atomicity)?;
         ret(match ty.decode::<M>(bytes) {
             Some(val) => {
-                assert!(val.check_wf(ty).is_ok(), "decode returned {val:?} which is ill-formed for {:#?}", ty);
+                self.check_value(val, ty)?;
                 val
             }
             None => throw_ub!("load at type {ty:?} but the data in memory violates the validity invariant"), // FIXME use Display instead of Debug for `ty`
         })
     }
+}
 
+impl<M: Memory> ConcurrentMemory<M> {
     /// Find all pointers in this value, ensure they are valid, and retag them.
     fn retag_val(&mut self, frame_extra: &mut M::FrameExtra, val: Value<M>, ty: Type, fn_entry: bool) -> Result<Value<M>> {
         ret(match (val, ty) {

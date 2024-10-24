@@ -41,7 +41,7 @@ impl<M: Memory> Machine<M> {
         let result = Value::Int(Self::eval_int_un_op(op, operand, int_ty)?);
 
         // Sanity-check that the result of `eval_int_un_op` is in-bounds.
-        result.check_wf(Type::Int(ret_ty))
+        self.check_value(result, Type::Int(ret_ty))
             .expect("sanity check: result of UnOp::Int does not fit in the return type");
         ret((result, Type::Int(ret_ty)))
     }
@@ -437,7 +437,7 @@ impl<M: Memory> Machine<M> {
         let metadata = PointerMeta::from_value::<M>(right);
         let wide_ptr = Value::Ptr(Pointer { thin_pointer, metadata });
 
-        wide_ptr.check_wf(Type::Ptr(ptr_ty)).expect("sanity check: constructed wide pointer is well-formed");
+        self.check_value(wide_ptr, Type::Ptr(ptr_ty)).expect("sanity check: constructed wide pointer is well-formed");
         ret((wide_ptr, Type::Ptr(ptr_ty)))
     }
 }
