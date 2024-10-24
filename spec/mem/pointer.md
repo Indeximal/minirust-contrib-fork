@@ -192,7 +192,7 @@ impl PtrType {
         if let Some(pointee) = self.safe_pointee() {
             // Safe addresses need to be non-null, aligned, and not point to an uninhabited type.
             // (Think: uninhabited types have impossible alignment.)
-            // FIXME(UnsizedTypes): Compute the alignment, don't assume it is sized.
+            // FIXME(UnsizedTypes): Compute the alignment, don't assume it is sized. This can be done only with vtable info, so is blocked currently.
             addr != 0 && pointee.layout.expect_align("FIXME").is_aligned(addr) && pointee.inhabited
         } else {
             true
