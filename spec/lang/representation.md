@@ -485,6 +485,7 @@ impl<M: Memory> Machine<M> {
 
 There are some generic properties that `encode` and `decode` must satisfy.
 The most obvious part is consistency of size and inhabitedness:
+FIXME: the inhabited function was removed.
 - If `ty.decode(bytes) == Some(val)`, then `bytes` has length `ty.size()` and `ty.inhabited() == true`.
 
 More interestingly, we have some round-trip properties.
@@ -599,6 +600,7 @@ impl<T: DefinedRelation> DefinedRelation for Option<T> {
 ```
 
 In the following, let `ty` be an arbitrary well-formed type.
+// FIXME
 We say that a `v: Value` is ["well-formed"][well-formed-value] for a type if `v.check_wf(ty)` is `Some(_)`.
 This ensures that the basic structure of the value and the type match up.
 Decode will only ever return well-formed values.
@@ -633,7 +635,7 @@ For example, if the original program later did a successful decode at an integer
 
 One key use of the value representation is to define a "typed" interface to memory.
 This interface is inspired by [Cerberus](https://www.cl.cam.ac.uk/~pes20/cerberus/).
-We also use this to lift retagging from pointers to compound values.
+We also lift retagging from pointers to compound values.
 
 ```rust
 impl<M: Memory> ConcurrentMemory<M> {
@@ -686,12 +688,14 @@ Certainly, it is the case that if a list of bytes is not related to any value fo
 We could decide that this is an "if and only if", i.e., that the validity invariant for a type is exactly "must be in the value representation":
 `bytes` is valid for `ty` if `ty.decode::<M>(bytes).is_some()` returns `true`.
 
+// FIXME: not true anymore. Also the "typed copy" still just checks everything. But I guess `check_value` is the validity invariant now?
 For many types this is likely what we will do anyway (e.g., for `bool` and `!` and `()` and integers), but for references, this choice would mean that *validity of the reference cannot depend on what memory looks like*---so "dereferenceable" and "points to valid data" cannot be part of the validity invariant for references.
 The reason this is so elegant is that, as we have seen above, a "typed copy" already very naturally is UB when the memory that is copied is not a valid representation of `T`.
 This means we do not even need a special clause in our specification for the validity invariant---in fact, the term does not even have to appear in the specification---as everything just falls out of how a "typed copy" applies the value representation.
 
 ### Validity of pointers
 
+// FIXME: this changed as well.
 For pointers, validity just says that `ptr_ty.addr_valid` holds for the address.
 However, we often also want to ensure that safe pointers are dereferenceable and respect the desired aliasing discipline.
 This does not apply at each and every typed copy, so it is not really part of validity, but we do ensure these properties by performing retagging (which also checks dereferencability) on each `AddrOf` and `Validate`.
@@ -711,6 +715,7 @@ fn transmute<M: Memory>(val: Value<M>, type1: Type, type2: Type) -> Option<Value
     assert!(type1.size::<M::T>() == type2.size::<M::T>());
     let bytes = type1.encode::<M>(val);
     ret(type2.decode::<M>(bytes)?)
+    // TODO(UnsizedTypes): Well, this also requires checking the value now...
 }
 ```
 
