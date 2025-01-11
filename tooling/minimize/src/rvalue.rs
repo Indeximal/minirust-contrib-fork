@@ -332,6 +332,13 @@ impl<'cx, 'tcx> FnCtxt<'cx, 'tcx> {
                                     Type::Ptr(new_ptr_ty),
                                 )
                             }
+                            (
+                                rs::TyKind::Adt(src_adt_def, src_args),
+                                rs::TyKind::Adt(dest_adt_def, dest_args),
+                            ) => {
+                                use rs::inherent::AdtDef;
+                                let dest_tail = dest_adt_def.struct_tail_ty();
+                            }
                             _ =>
                                 rs::span_bug!(
                                     span,

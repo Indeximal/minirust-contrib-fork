@@ -17,6 +17,7 @@ impl<'tcx> Ctxt<'tcx> {
 
         // Handle Unsized types:
         match ty.kind() {
+            // Having a separate match here allows us to translate slice whose elements we cannot translate, but aren't used.
             &rs::TyKind::Slice(elem_ty) => {
                 let elem_layout = self.rs_layout_of(elem_ty);
                 let size = translate_size(elem_layout.size());
@@ -86,7 +87,23 @@ impl<'tcx> Ctxt<'tcx> {
             }
             rs::TyKind::Adt(adt_def, sref) if adt_def.is_struct() => {
                 let (fields, size, align) = self.translate_non_enum_adt(ty, *adt_def, sref, span);
-                build::tuple_ty(&fields.iter().collect::<Vec<_>>(), size, align)
+                let mut fields = fields.into_iter().collect::<Vec<_>>();
+
+                if self.rs_layout_of(ty).is_sized() {
+                    build::tuple_ty(&fields, size, align)
+                } else {
+                    // The translate_non_enum_adt already translates the unsized tail and puts in in the last field with an offset
+                    // equal to our definition of `end`.
+                    let Some((end, unsized_ty)) = fields.pop() else {
+                        rs::span_bug!(span, "unsized struct without fields: {ty}");
+                    };
+                    if unsized_ty.layout::<DefaultTarget>().is_sized() {
+                        rs::span_bug!(span, "unsized struct with sized tail: {ty}");
+                    }
+                    // FIXME: support packed
+                    let pointee_ty = build::unsized_tuple_ty(&fields, unsized_ty, end, align, None);
+                    pointee_ty
+                }
             }
             rs::TyKind::Adt(adt_def, sref) if adt_def.is_union() => {
                 let (fields, size, align) = self.translate_non_enum_adt(ty, *adt_def, sref, span);
